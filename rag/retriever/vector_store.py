@@ -1,9 +1,17 @@
 """ChromaDB-backed vector store for semantic retrieval."""
 
 import chromadb
+import chromadb.errors
 import structlog
 
 logger = structlog.get_logger()
+
+# A missing collection raises NotFoundError on current chromadb, and ValueError on the older
+# releases pyproject.toml still allows (chromadb>=0.4.22), which predate NotFoundError.
+_MISSING_COLLECTION_ERRORS: tuple[type[Exception], ...] = (
+    getattr(chromadb.errors, "NotFoundError", ValueError),
+    ValueError,
+)
 
 
 class VectorStore:
@@ -126,3 +134,28 @@ class VectorStore:
                 count=len(all_docs["ids"]),
                 collection=collection_name,
             )
+
+    def delete_collection(self, name: str) -> None:
+        """Delete a collection and every chunk in it.
+
+        A missing collection is treated as already deleted. This does not go through
+        get_collection, which would create the collection before deleting it.
+
+        Args:
+            name: Collection name
+        """
+        try:
+            self.client.delete_collection(name=name)
+        except _MISSING_COLLECTION_ERRORS:
+            logger.info("collection_already_absent", collection_name=name)
+            return
+        logger.info("deleted_collection", collection_name=name)
+
+
+def get_vector_store() -> VectorStore:
+    """Provide the vector store as a FastAPI dependency.
+
+    Returns:
+        VectorStore on the default persist directory, the same store the retriever reads
+    """
+    return VectorStore()
