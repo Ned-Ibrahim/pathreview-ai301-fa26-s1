@@ -7,6 +7,7 @@ from api.schemas.profile import ProfileCreate, ProfileUpdate
 from core.models.ingested_source import IngestedSource
 from core.models.profile import Profile
 from core.models.review import Review
+from rag.retriever.vector_store import VectorStore
 
 log = structlog.get_logger()
 
@@ -75,9 +76,11 @@ async def delete_profile(
     db,
     profile_id: UUID,
     user_id: UUID,
+    vector_store: VectorStore,
 ) -> bool:
     """
-    Delete a profile and cascade delete reviews and ingested sources.
+    Delete a profile, its vector-store collection, and cascade delete reviews and
+    ingested sources.
     Returns True if deleted, False if not found.
     """
     profile = await get_profile(db, profile_id, user_id)
@@ -85,6 +88,9 @@ async def delete_profile(
         return False
 
     try:
+        # Drop the profile's chunks first, so a vector-store failure leaves the rows untouched
+        vector_store.delete_collection(f"profile_{profile_id}")
+
         # Delete related reviews
         stmt = select(Review).where(Review.profile_id == profile_id)
         result = await db.execute(stmt)

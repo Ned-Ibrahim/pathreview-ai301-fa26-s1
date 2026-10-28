@@ -14,6 +14,7 @@ from core.services.profile_service import (
     get_profile,
     update_profile,
 )
+from rag.retriever.vector_store import VectorStore, get_vector_store
 
 log = structlog.get_logger()
 
@@ -197,9 +198,11 @@ async def delete_profile_endpoint(
     profile_id: UUID,
     current_user: User = Depends(get_current_user),
     db=Depends(get_db),
+    vector_store: VectorStore = Depends(get_vector_store),
 ):
     """
-    Delete a profile and cascade delete reviews and ingested sources.
+    Delete a profile, its vector-store collection, and cascade delete reviews and
+    ingested sources.
     Returns 404 if not found or not owned by current user.
     """
     try:
@@ -207,6 +210,7 @@ async def delete_profile_endpoint(
             db=db,
             profile_id=profile_id,
             user_id=current_user.id,
+            vector_store=vector_store,
         )
 
         if not success:
